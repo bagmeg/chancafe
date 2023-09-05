@@ -1,58 +1,21 @@
 package main
 
-import "time"
-
 func main() {
-	orderChan := make(chan Order)
-	productChan := make(chan Product)
+	nameChan := make(chan string, 1)
+	numChan := make(chan int, 2)
+	cafeChan := make(chan *Cafe, 1)
 
-	baristaChan := make(chan IBarista)
-	waiterChan := make(chan IWaiter)
+	go NewCafe(nameChan, numChan, cafeChan)
 
-	baristas := make([]IBarista, 0)
-	waiters := make([]IWaiter, 0)
+	numChan <- 2
+	numChan <- 3
 
-	nameChan := make(chan string)
+	nameChan <- "Starbucks"
 
-	// make barista James
-	go NewBarista(nameChan, orderChan, productChan, baristaChan)
-	nameChan <- "James"
+	cafe := <-cafeChan
 
-	baristas = append(baristas, <-baristaChan)
+	cafe.Open()
 
-	// make barista John
-	go NewBarista(nameChan, orderChan, productChan, baristaChan)
-	nameChan <- "John"
-
-	baristas = append(baristas, <-baristaChan)
-
-	// make waiter Brand
-	go NewWaiter(nameChan, orderChan, productChan, waiterChan)
-	nameChan <- "Brand"
-
-	waiters = append(waiters, <-waiterChan)
-
-	// make waiter Summer
-	go NewWaiter(nameChan, orderChan, productChan, waiterChan)
-	nameChan <- "Summer"
-
-	waiters = append(waiters, <-waiterChan)
-
-	counterChan := make(chan Order)
-	for _, w := range waiters {
-		go w.TakeOrder(counterChan)
-	}
-
-	for _, b := range baristas {
-		go b.MakeProduct()
-	}
-
-	for {
-		order := Order{
-			Name: "Cappuccino",
-		}
-
-		counterChan <- order
-		time.Sleep(77 * time.Millisecond)
-	}
+	// start taking order from customers
+	cafe.TakeOrder()
 }

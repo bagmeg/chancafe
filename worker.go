@@ -1,17 +1,16 @@
 package main
 
 import (
-	"fmt"
 	"time"
 )
 
 type Product struct {
-	Name  string
+	Name  Menu
 	Maker string
 }
 
 type Order struct {
-	Name string
+	Name Menu
 }
 
 type IBarista interface {
@@ -19,40 +18,59 @@ type IBarista interface {
 }
 
 type IWaiter interface {
-	TakeOrder(<-chan Order)
+	TakeOrder()
 }
 
 type Barista struct {
-	Name    string
-	Worder  <-chan Order   // receive order from waiter
-	Wresult chan<- Product // send product to waiter
+	Name string
+
+	orderFromWaiter <-chan Order
+	productToWaiter chan<- Product
 }
 
 type Waiter struct {
-	Name    string
-	Worder  chan<- Order   // send order to barista
-	Wresult <-chan Product // receive product from barista
+	Name string
+
+	orderFromCustomer <-chan Order
+	orderToBarista    chan<- Order
+
+	productFromBarista <-chan Product
+	productToCustomer  chan<- Product
 }
 
-func NewWaiter(n <-chan string, or chan<- Order, re <-chan Product, res chan<- IWaiter) {
+func NewWaiter(
+	n <-chan string,
+	orderFromCustomer <-chan Order,
+	orderToBarista chan<- Order,
+	productFromBarista <-chan Product,
+	productToCustomer chan<- Product,
+	res chan<- IWaiter,
+) {
 	name := <-n
 
 	w := &Waiter{
-		Name:    name,
-		Worder:  or,
-		Wresult: re,
+		Name:               name,
+		orderFromCustomer:  orderFromCustomer,
+		orderToBarista:     orderToBarista,
+		productFromBarista: productFromBarista,
+		productToCustomer:  productToCustomer,
 	}
 
 	res <- w
 }
 
-func NewBarista(n <-chan string, or <-chan Order, re chan<- Product, res chan<- IBarista) {
+func NewBarista(
+	n <-chan string,
+	orderFromWaiter <-chan Order,
+	productToWaiter chan<- Product,
+	res chan<- IBarista,
+) {
 	name := <-n
 
 	b := &Barista{
-		Name:    name,
-		Worder:  or,
-		Wresult: re,
+		Name:            name,
+		orderFromWaiter: orderFromWaiter,
+		productToWaiter: productToWaiter,
 	}
 
 	res <- b
@@ -60,23 +78,28 @@ func NewBarista(n <-chan string, or <-chan Order, re chan<- Product, res chan<- 
 
 func (b *Barista) MakeProduct() {
 	for {
-		o := <-b.Worder
+		order := <-b.orderFromWaiter
 
-		p := Product{Name: o.Name, Maker: b.Name}
+		p := Product{Name: order.Name, Maker: b.Name}
 
-		time.Sleep(333 * time.Millisecond)
-		b.Wresult <- p
+		// takes some time to make product
+		time.Sleep(813 * time.Millisecond)
+
+		b.productToWaiter <- p
 	}
 }
 
-func (w *Waiter) TakeOrder(o <-chan Order) {
+func (w *Waiter) TakeOrder() {
 	for {
-		order := <-o
+		order := <-w.orderFromCustomer
 
-		w.Worder <- order
+		// takes some time to get order
+		time.Sleep(187 * time.Millisecond)
 
-		p := <-w.Wresult
+		w.orderToBarista <- order
 
-		fmt.Println("Waiter", w.Name, "serves", p.Name, "made by", p.Maker)
+		product := <-w.productFromBarista
+
+		w.productToCustomer <- product
 	}
 }
