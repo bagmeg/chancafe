@@ -1,7 +1,16 @@
 package main
 
 import (
+	"log"
+	"sync"
 	"time"
+)
+
+type Status int
+
+const (
+	WORKING = iota
+	NOT_WORKING
 )
 
 type Product struct {
@@ -26,6 +35,11 @@ type Barista struct {
 
 	orderFromWaiter <-chan Order
 	productToWaiter chan<- Product
+
+	stopWorking <-chan struct{}
+	status      Status
+
+	wg *sync.WaitGroup
 }
 
 type Waiter struct {
@@ -36,9 +50,16 @@ type Waiter struct {
 
 	productFromBarista <-chan Product
 	productToCustomer  chan<- Product
+
+	stopWorking <-chan struct{}
+	status      Status
+
+	wg *sync.WaitGroup
 }
 
 func NewWaiter(
+	stopWorking <-chan struct{},
+	wg *sync.WaitGroup,
 	n <-chan string,
 	orderFromCustomer <-chan Order,
 	orderToBarista chan<- Order,
@@ -54,12 +75,16 @@ func NewWaiter(
 		orderToBarista:     orderToBarista,
 		productFromBarista: productFromBarista,
 		productToCustomer:  productToCustomer,
+		stopWorking:        stopWorking,
+		wg:                 wg,
 	}
 
 	res <- w
 }
 
 func NewBarista(
+	stopWorking <-chan struct{},
+	wg *sync.WaitGroup,
 	n <-chan string,
 	orderFromWaiter <-chan Order,
 	productToWaiter chan<- Product,
@@ -71,14 +96,31 @@ func NewBarista(
 		Name:            name,
 		orderFromWaiter: orderFromWaiter,
 		productToWaiter: productToWaiter,
+		stopWorking:     stopWorking,
+		wg:              wg,
 	}
 
 	res <- b
 }
 
 func (b *Barista) MakeProduct() {
+	b.wg.Add(1)
+	defer b.wg.Done()
+	defer log.Printf("Oh!! Barista %s is going home", b.Name)
+
+	go b.stopBaristWorking()
+
+	b.status = WORKING
 	for {
-		order := <-b.orderFromWaiter
+		if b.status == NOT_WORKING {
+			return
+		}
+
+		order, ok := <-b.orderFromWaiter
+		if !ok {
+			log.Println("Barista: order channel is closed")
+			return
+		}
 
 		p := Product{Name: order.Name, Maker: b.Name}
 
@@ -89,9 +131,29 @@ func (b *Barista) MakeProduct() {
 	}
 }
 
+func (b *Barista) stopBaristWorking() {
+	<-b.stopWorking
+	b.status = NOT_WORKING
+}
+
 func (w *Waiter) TakeOrder() {
+	w.wg.Add(1)
+	defer w.wg.Done()
+	defer log.Printf("Oh!! Waiter %s is going home", w.Name)
+
+	go w.stopWaiterWorking()
+
+	w.status = WORKING
 	for {
-		order := <-w.orderFromCustomer
+		if w.status == NOT_WORKING {
+			return
+		}
+
+		order, ok := <-w.orderFromCustomer
+		if !ok {
+			log.Println("Waiter: order channel is closed")
+			return
+		}
 
 		// takes some time to get order
 		time.Sleep(187 * time.Millisecond)
@@ -102,4 +164,9 @@ func (w *Waiter) TakeOrder() {
 
 		w.productToCustomer <- product
 	}
+}
+
+func (w *Waiter) stopWaiterWorking() {
+	<-w.stopWorking
+	w.status = NOT_WORKING
 }
