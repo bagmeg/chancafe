@@ -46,6 +46,8 @@ type Cafe struct {
 	waiters  []IWaiter
 	baristas []IBarista
 
+	manager *Manager
+
 	totalWorkers int
 
 	opened bool
@@ -55,16 +57,22 @@ func NewCafe(name <-chan string, nums <-chan int, res chan<- *Cafe) {
 	waiterCount := <-nums
 	baristaCount := <-nums
 
+	m := NewManager()
+
 	totalWorkers := waiterCount + baristaCount
 
 	waiters := make([]IWaiter, 0, waiterCount)
 	baristas := make([]IBarista, 0, baristaCount)
 
-	waiter2customerChan := make(chan Product, 1)
-	customer2waiterChan := make(chan Order, 1)
+	// waiter2customerChan := make(chan Product, 1)
+	// customer2waiterChan := make(chan Order, 1)
+	waiter2customerChan := m.GetProductChan()
+	customer2waiterChan := m.GetOrderChan()
 
-	waiter2baristaChan := make(chan Order, 3)
-	barista2waiterChan := make(chan Product, 3)
+	// waiter2baristaChan := make(chan Order, 3)
+	// barista2waiterChan := make(chan Product, 3)
+	waiter2baristaChan := m.GetOrderToBaristachan()
+	barista2waiterChan := m.GetProductToWaiterChan()
 
 	stopWorkingChan := make(chan struct{}, totalWorkers)
 	wg := sync.WaitGroup{}
@@ -106,6 +114,8 @@ func NewCafe(name <-chan string, nums <-chan int, res chan<- *Cafe) {
 		stopWorkingChan: stopWorkingChan,
 		wg:              &wg,
 
+		manager: m,
+
 		totalWorkers: totalWorkers,
 	}
 }
@@ -141,10 +151,7 @@ func (c *Cafe) Close() {
 		c.stopWorkingChan <- struct{}{}
 	}
 
-	close(c.barista2waiterChan)
-	close(c.waiter2baristaChan)
-	close(c.waiter2customerChan)
-	close(c.customer2waiterChan)
+	c.manager.Close()
 
 	c.wg.Wait()
 

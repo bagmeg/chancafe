@@ -117,7 +117,7 @@ func (b *Barista) MakeProduct() {
 		}
 
 		order, ok := <-b.orderFromWaiter
-		if !ok {
+		if !ok || b.status == NOT_WORKING {
 			log.Println("Barista: order channel is closed")
 			return
 		}
@@ -127,7 +127,9 @@ func (b *Barista) MakeProduct() {
 		// takes some time to make product
 		time.Sleep(813 * time.Millisecond)
 
-		b.productToWaiter <- p
+		if b.status == WORKING {
+			b.productToWaiter <- p
+		}
 	}
 }
 
@@ -137,6 +139,8 @@ func (b *Barista) stopBaristWorking() {
 }
 
 func (w *Waiter) TakeOrder() {
+	var product Product
+
 	w.wg.Add(1)
 	defer w.wg.Done()
 	defer log.Printf("Oh!! Waiter %s is going home", w.Name)
@@ -150,7 +154,7 @@ func (w *Waiter) TakeOrder() {
 		}
 
 		order, ok := <-w.orderFromCustomer
-		if !ok {
+		if !ok || w.status == NOT_WORKING {
 			log.Println("Waiter: order channel is closed")
 			return
 		}
@@ -158,11 +162,17 @@ func (w *Waiter) TakeOrder() {
 		// takes some time to get order
 		time.Sleep(187 * time.Millisecond)
 
-		w.orderToBarista <- order
+		if w.status == WORKING {
+			w.orderToBarista <- order
+		}
 
-		product := <-w.productFromBarista
+		if w.status == WORKING {
+			product = <-w.productFromBarista
+		}
 
-		w.productToCustomer <- product
+		if w.status == WORKING {
+			w.productToCustomer <- product
+		}
 	}
 }
 
