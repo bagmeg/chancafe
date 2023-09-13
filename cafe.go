@@ -64,13 +64,9 @@ func NewCafe(name <-chan string, nums <-chan int, res chan<- *Cafe) {
 	waiters := make([]IWaiter, 0, waiterCount)
 	baristas := make([]IBarista, 0, baristaCount)
 
-	// waiter2customerChan := make(chan Product, 1)
-	// customer2waiterChan := make(chan Order, 1)
 	waiter2customerChan := m.GetProductChan()
 	customer2waiterChan := m.GetOrderChan()
 
-	// waiter2baristaChan := make(chan Order, 3)
-	// barista2waiterChan := make(chan Product, 3)
 	waiter2baristaChan := m.GetOrderToBaristachan()
 	barista2waiterChan := m.GetProductToWaiterChan()
 
@@ -164,19 +160,20 @@ func (c *Cafe) TakeOrder() {
 			break
 		}
 
-		time.Sleep(777 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		// order a random menu
 		c.customer2waiterChan <- Order{
 			Name: MenuList[time.Now().Nanosecond()%len(MenuList)],
 		}
 
-		product, ok := <-c.waiter2customerChan
-		if !ok {
-			log.Println("Cafe: waiter2customerChan is closed")
-			break
-		}
-
-		log.Printf("Customer got %s, made by %s\n", product.Name, product.Maker)
+		go func() {
+			product, ok := <-c.waiter2customerChan
+			if !ok {
+				log.Println("Cafe: waiter2customerChan is closed")
+				return
+			}
+			log.Printf("Customer got %s, made by %s\n", product.Name, product.Maker)
+		}()
 	}
 }
